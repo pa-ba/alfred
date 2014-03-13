@@ -1,5 +1,45 @@
 {-# LANGUAGE OverloadedStrings, NamedFieldPuns #-}
 
+--------------------------------------------------------------------------------
+-- |
+-- Module      :  Alfred
+-- Copyright   :  (c) 2014 Patrick Bahr
+-- License     :  BSD3
+-- Maintainer  :  Patrick Bahr <paba@di.ku.dk>
+-- Stability   :  experimental
+-- Portability :  non-portable (GHC Extensions)
+--
+-- This module provides utility functions to interact with Alfred
+-- version 2. It is intended to be used for writing "script filters"
+-- used in Alfred workflows.
+--  
+-- For example the following excerpt defines a script for Google
+-- search with auto completion:
+-- 
+-- @
+-- import Alfred
+-- import Alfred.Query
+-- import qualified Data.Text as T
+-- import Data.Text (Text)
+-- 
+-- runQuery :: String -> IO (Text,[Text])
+-- runQuery query = jsonQuery suggestURL query
+-- 
+-- suggestURL = "http://suggestqueries.google.com/complete/search?output=toolbar&client=firefox&hl=en&q="
+-- 
+-- mkItems :: (Text, [Text]) -> [Item]
+-- mkItems = mkSearchItems MkSearch {
+--             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
+--             notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
+--             found = \s -> T.concat ["Search results for ", s]}
+-- 
+-- main = runScript runQuery mkItems
+-- @
+-- 
+--
+--------------------------------------------------------------------------------
+
+
 module Alfred
     ( Item (..)
     , Icon (..)
@@ -18,6 +58,9 @@ import Data.List
 
 import Alfred.Query
 
+-- | This type represents items that should be rendered by Alfred as
+-- the result of a script filter.
+
 data Item = Item {
       uid :: Maybe Text
     , arg :: Text
@@ -29,8 +72,16 @@ data Item = Item {
     , icon :: Maybe Icon
 }
 
+
+-- | A list of items.
+type Items = [Item]
+
+-- | Represents icons of an item.
+
 data Icon = FileIcon Text | FileType Text | IconFile Text
 
+
+-- | Render an icon as XML element.
 xmlIcon :: Icon -> Xml Elem
 xmlIcon icon = case icon of
                FileIcon str -> mk str (xattr "type" "fileicon")
@@ -39,6 +90,7 @@ xmlIcon icon = case icon of
     where mk :: Text -> Xml Attr -> Xml Elem
           mk str f = xelem "icon" (f <#> xtext str)
 
+-- | Render an item as XML element.
 xmlItem :: Item -> Xml Elem
 xmlItem (Item  uid arg file val auto title sub icon) = 
     xelem "item" $
@@ -53,28 +105,61 @@ xmlItem (Item  uid arg file val auto title sub icon) =
               auto' = case auto of Nothing -> mempty; Just auto -> xattr "autocomplete" auto
               icon' = case icon of Nothing -> mempty; Just icon -> xmlIcon icon
 
-xmlItems :: [Item] -> Xml Elem
+-- | Render items as an XML element.
+xmlItems :: Items -> Xml Elem
 xmlItems = xelem "items" . mconcat . map xmlItem 
 
-renderItems :: [Item] -> ByteString
+
+-- | Render items as an XML 'ByteString'.
+renderItems :: Items -> ByteString
 renderItems  = xrender . xmlItems
 
-printItems :: [Item] -> IO ()
+-- | Print items as XML to stdout.
+printItems :: Items -> IO ()
 printItems = B.putStr . renderItems
 
-runScript' :: ([String] -> IO a) -> (a -> [Item]) -> IO ()
+
+-- | This function runs a script consisting of a query function and a
+-- rendering function. The query function takes string parameters and
+-- produces an output that is then passed to the rendering function to
+-- produce items that are then passed to Alfred.
+runScript' :: ([String] -> IO a)  -- ^ query function
+           -> (a -> Items)        -- ^ rendering function
+           -> IO ()
 runScript' runQuery mkItems = do
   args <- getArgs
   res <- runQuery args
   printItems $ mkItems res
 
 
-runScript :: (String -> IO a) -> (a -> [Item]) -> IO ()
+-- | This function runs a script consisting of a query function and a
+-- rendering function. The query function takes string parameters and
+-- produces an output that is then passed to the rendering function to
+-- produce items that are then passed to Alfred.
+runScript :: (String -> IO a)  -- ^ query function
+          -> (a -> Items)      -- ^ rendering function
+          -> IO ()
 runScript runQuery = runScript' (runQuery . concat . intersperse " ")
 
+-- | This data type represents standard search scripts used by
+-- 'mkSearchItems'.
 data MkSearch = MkSearch {searchURL, found, notFound :: Text -> Text}
 
-mkSearchItems :: MkSearch -> (Text, [Text]) -> [Item]
+
+-- | This function produces a rendering function for standard search
+-- scripts. For example a Google search rendering function is defined
+-- as follows:
+-- 
+-- @
+-- mkItems :: (Text, [Text]) -> Items
+-- mkItems = mkSearchItems MkSearch {
+--             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
+--             notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
+--             found = \s -> T.concat ["Search results for ", s]}
+-- @
+--
+
+mkSearchItems :: MkSearch -> (Text, [Text]) -> Items
 mkSearchItems MkSearch {searchURL, found, notFound} suggs = 
     case suggs of
       (s,[]) -> [Item {uid=Nothing,arg=searchURL (escapeText s),isFile=False,
