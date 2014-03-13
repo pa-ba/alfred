@@ -12,6 +12,9 @@ Maintainer:             paba@di.ku.dk
 Build-Type:             Simple
 Cabal-Version:          >=1.9.2
 
+source-repository head
+  type:     git
+  location: https://github.com/pa-ba/alfred.git
 
 library
   Exposed-Modules:      Alfred
