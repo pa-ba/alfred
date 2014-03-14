@@ -27,13 +27,14 @@
 -- 
 -- suggestURL = "http://suggestqueries.google.com/complete/search?output=toolbar&client=firefox&hl=en&q="
 -- 
--- mkItems :: (Text, [Text]) -> [Item]
--- mkItems = mkSearchItems Search {
+-- mkItems :: Renderer [Text]
+-- mkItems = searchRenderer Search {
 --             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
 --             notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
+--             suggestError = \s -> T.concat ["Could not load suggestions! Google for ", s, "."],
 --             found = \s -> T.concat ["Search results for ", s]}
--- 
--- main = runScript runQuery mkItems
+--
+-- main = runScript (transformQuery snd runQuery) mkItems
 -- @
 -- 
 --
@@ -76,7 +77,7 @@ data Item = Item {
     , icon :: Maybe Icon
 }
 
--- | Default item
+-- | Default item.
 item :: Item
 item = Item {uid=Nothing,arg=undefined,isFile=False,valid=Nothing,
                   autocomplete=Nothing,title=undefined, subtitle=undefined,
@@ -127,8 +128,10 @@ renderItems  = xrender . xmlItems
 printItems :: Items -> IO ()
 printItems = B.putStr . renderItems
 
-
+-- | This type represents rendering functions as used by 'runScript'.
 type Renderer a = (Text -> Either String a -> Items)
+
+-- | This type represents rendering functions as used by 'runScript''.
 type Renderer' a = ([Text] -> Either String a -> Items)
 
 -- | This function runs a script consisting of a query function and a

@@ -1,6 +1,14 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 
-module Alfred.Query (jsonQuery,escapeString,escapeText, Query, transformQuery, Query', transformQuery') where
+module Alfred.Query 
+    ( jsonQuery
+    , escapeString
+    , escapeText
+    , Query
+    , transformQuery
+    , Query'
+    , transformQuery'
+    ) where
 
 import Network.HTTP
 import Network.URI hiding (escapeString)
@@ -11,12 +19,20 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import System.IO.Error
 
+-- | Type representing queries for use in 'Alfred.runScript'.
+type Query a = String -> IO (Either String a)
+
+-- | Alternative type representing queries for use in
+-- 'Alfred.runScript''.
+type Query' a = [String] -> IO (Either String a)
+
+
 -- | This function performs a query by performing an HTTP GET request
 -- at the url obtained by concatenating the first argument with the
--- second one (after escaping it). The first argument is intended to
--- be the base url and the second one the query string. The result is
--- then parsed as a JSON object. For example,
--- for a Google search:
+-- second one (after escaping it). The returned query takes a string
+-- as an argument and appends it to the base url to obtain the url
+-- that is used for the query. The result is then parsed as a JSON
+-- object. For example, for a Google search:
 -- 
 -- @
 -- runQuery :: String -> IO (Text,[Text])
@@ -25,9 +41,6 @@ import System.IO.Error
 -- suggestURL = "http://suggestqueries.google.com/complete/search?output=toolbar&client=firefox&hl=en&q="
 -- @
 -- 
-
-type Query a = String -> IO (Either String a)
-type Query' a = [String] -> IO (Either String a)
 
 jsonQuery :: FromJSON a => String -> Query a
 jsonQuery base query =
@@ -42,19 +55,22 @@ jsonQuery base query =
                                       Left msg -> return $ Left ("JSON decoding error: " ++ msg ++ "\n" ++ 
                                                    show (rspBody res))
                                       Right res -> return (Right res)
-                 
 
+
+-- | Constructions a request for doing a JSON query.
+mkJSONRequest :: URI -> Request ByteString
+mkJSONRequest url = setHeaders (mkRequest GET url) jsonHeaders
+    where jsonHeaders :: [Header]
+          jsonHeaders = [mkHeader HdrContentType "application/json"]
+
+                 
+-- | Functorial map for 'Query'.
 transformQuery :: (a -> b) -> Query a -> Query b
 transformQuery f = fmap (fmap (fmap f))
 
+-- | Functorial map for 'Query''.
 transformQuery' :: (a -> b) -> Query' a -> Query' b
 transformQuery' f = fmap (fmap (fmap f))
-
-mkJSONRequest :: URI -> Request ByteString
-mkJSONRequest url = setHeaders (mkRequest GET url) jsonHeaders
-
-jsonHeaders :: [Header]
-jsonHeaders = [mkHeader HdrContentType "application/json"]
 
 -- | Escapes the string for use in a URL.
 escapeString :: String -> String
