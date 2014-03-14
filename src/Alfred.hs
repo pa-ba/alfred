@@ -28,7 +28,7 @@
 -- suggestURL = "http://suggestqueries.google.com/complete/search?output=toolbar&client=firefox&hl=en&q="
 -- 
 -- mkItems :: (Text, [Text]) -> [Item]
--- mkItems = mkSearchItems MkSearch {
+-- mkItems = mkSearchItems Search {
 --             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
 --             notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
 --             found = \s -> T.concat ["Search results for ", s]}
@@ -48,8 +48,8 @@ module Alfred
     , Renderer'
     , runScript
     , runScript'
-    , mkSearchItems
-    , MkSearch (..)) where
+    , searchRenderer
+    , Search (..)) where
 
 import Text.XML.Generator
 import qualified Data.ByteString as B
@@ -158,8 +158,8 @@ runScript runQuery mkItems = do
   printItems $ mkItems (T.pack arg) res
 
 -- | This data type represents standard search scripts used by
--- 'mkSearchItems'.
-data MkSearch = MkSearch {searchURL, found, notFound, suggestError :: Text -> Text}
+-- 'searchRenderer'.
+data Search = Search {searchURL, found, notFound, suggestError :: Text -> Text}
 
 
 -- | This function produces a rendering function for standard search
@@ -168,19 +168,19 @@ data MkSearch = MkSearch {searchURL, found, notFound, suggestError :: Text -> Te
 -- 
 -- @
 -- mkItems :: (Text, [Text]) -> Items
--- mkItems = mkSearchItems MkSearch {
+-- mkItems = mkSearchItems Search {
 --             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
 --             notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
 --             found = \s -> T.concat ["Search results for ", s]}
 -- @
 --
 
-mkSearchItems :: MkSearch -> Text -> Either String [Text] -> Items
-mkSearchItems MkSearch {suggestError, searchURL} s (Left _) = 
+searchRenderer :: Search -> Renderer [Text]
+searchRenderer Search {suggestError, searchURL} s (Left _) = 
     [Item {uid=Nothing,arg=searchURL (escapeText s),isFile=False,
            valid=Nothing,autocomplete=Nothing,title=s,
            subtitle=suggestError s,icon=Just (IconFile "icon.png")}]
-mkSearchItems MkSearch {searchURL, found, notFound} s (Right suggs) = 
+searchRenderer Search {searchURL, found, notFound} s (Right suggs) = 
     case suggs of
       [] -> [Item {uid=Nothing,arg=searchURL2 (escapeText s),isFile=False,
                        valid=Nothing,autocomplete=Nothing,title=s,
