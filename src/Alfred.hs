@@ -42,7 +42,10 @@
 
 module Alfred
     ( Item (..)
+    , item
     , Icon (..)
+    , Renderer
+    , Renderer'
     , runScript
     , runScript'
     , mkSearchItems
@@ -51,6 +54,7 @@ module Alfred
 import Text.XML.Generator
 import qualified Data.ByteString as B
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.ByteString (ByteString)
 import Data.Monoid
 import System.Environment
@@ -72,6 +76,11 @@ data Item = Item {
     , icon :: Maybe Icon
 }
 
+-- | Default item
+item :: Item
+item = Item {uid=Nothing,arg=undefined,isFile=False,valid=Nothing,
+                  autocomplete=Nothing,title=undefined, subtitle=undefined,
+                  icon=Just (IconFile "icon.png")}
 
 -- | A list of items.
 type Items = [Item]
@@ -119,31 +128,38 @@ printItems :: Items -> IO ()
 printItems = B.putStr . renderItems
 
 
+type Renderer a = (Text -> Either String a -> Items)
+type Renderer' a = ([Text] -> Either String a -> Items)
+
 -- | This function runs a script consisting of a query function and a
 -- rendering function. The query function takes string parameters and
 -- produces an output that is then passed to the rendering function to
 -- produce items that are then passed to Alfred.
-runScript' :: ([String] -> IO a)  -- ^ query function
-           -> (a -> Items)        -- ^ rendering function
+runScript' :: Query' a    -- ^ query function
+           -> Renderer' a  -- ^ rendering function
            -> IO ()
 runScript' runQuery mkItems = do
   args <- getArgs
   res <- runQuery args
-  printItems $ mkItems res
+  printItems $ mkItems (map T.pack args) res
 
 
 -- | This function runs a script consisting of a query function and a
 -- rendering function. The query function takes string parameters and
 -- produces an output that is then passed to the rendering function to
 -- produce items that are then passed to Alfred.
-runScript :: (String -> IO a)  -- ^ query function
-          -> (a -> Items)      -- ^ rendering function
+runScript :: Query a    -- ^ query function
+          -> Renderer a -- ^ rendering function
           -> IO ()
-runScript runQuery = runScript' (runQuery . concat . intersperse " ")
+runScript runQuery mkItems = do
+  args <- getArgs
+  let arg = concat $ intersperse " " args
+  res <- runQuery arg
+  printItems $ mkItems (T.pack arg) res
 
 -- | This data type represents standard search scripts used by
 -- 'mkSearchItems'.
-data MkSearch = MkSearch {searchURL, found, notFound :: Text -> Text}
+data MkSearch = MkSearch {searchURL, found, notFound, suggestError :: Text -> Text}
 
 
 -- | This function produces a rendering function for standard search
@@ -159,19 +175,21 @@ data MkSearch = MkSearch {searchURL, found, notFound :: Text -> Text}
 -- @
 --
 
-mkSearchItems :: MkSearch -> (Text, [Text]) -> Items
-mkSearchItems MkSearch {searchURL, found, notFound} suggs = 
+mkSearchItems :: MkSearch -> Text -> Either String [Text] -> Items
+mkSearchItems MkSearch {suggestError, searchURL} s (Left _) = 
+    [Item {uid=Nothing,arg=searchURL (escapeText s),isFile=False,
+           valid=Nothing,autocomplete=Nothing,title=s,
+           subtitle=suggestError s,icon=Just (IconFile "icon.png")}]
+mkSearchItems MkSearch {searchURL, found, notFound} s (Right suggs) = 
     case suggs of
-      (s,[]) -> [Item {uid=Nothing,arg=searchURL (escapeText s),isFile=False,
+      [] -> [Item {uid=Nothing,arg=searchURL2 (escapeText s),isFile=False,
                        valid=Nothing,autocomplete=Nothing,title=s,
                        subtitle=notFound s,icon=Just (IconFile "icon.png")}]
-      (s,res@(r:_)) ->  first ++ map mkItem res
-         where first = if s == r then []
-                       else [Item {uid=Nothing,arg=searchURL (escapeText s),isFile=False,
-                              valid=Nothing,autocomplete=Just r, title=s, subtitle=found s,
-                              icon=Just (IconFile "icon.png")}]
+      res ->  map mkItem res
 
   where mkItem :: Text -> Item
-        mkItem s = Item {uid=Nothing,arg=searchURL (escapeText s),isFile=False,valid=Nothing,
-                         autocomplete=Just s, title=s,  subtitle=found s,icon=Just (IconFile "icon.png")}
-
+        mkItem t = Item {uid=Nothing,arg=arg,isFile=False,valid=Nothing,
+                         autocomplete=Just t, title=t,  subtitle=found t,icon=Just (IconFile "icon.png")}
+            where arg = T.concat ["\"",searchURL (escapeText t),"\" \"", searchURL (escapeText s), "\""]
+        searchURL2 s = T.concat ["\"",url,"\" \"", url, "\""]
+            where url = searchURL s
