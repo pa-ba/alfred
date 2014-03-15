@@ -60,6 +60,7 @@ import Data.ByteString (ByteString)
 import Data.Monoid
 import System.Environment
 import Data.List
+import Control.Applicative
 
 import Alfred.Query
 
@@ -129,22 +130,23 @@ printItems :: Items -> IO ()
 printItems = B.putStr . renderItems
 
 -- | This type represents rendering functions as used by 'runScript'.
-type Renderer a = (Text -> Either String a -> Items)
+type Renderer a = Renderer' Text a
 
 -- | This type represents rendering functions as used by 'runScript''.
-type Renderer' a = ([Text] -> Either String a -> Items)
+type Renderer' q a = (q -> Either String a -> Items)
 
 -- | This function runs a script consisting of a query function and a
 -- rendering function. The query function takes string parameters and
 -- produces an output that is then passed to the rendering function to
 -- produce items that are then passed to Alfred.
-runScript' :: Query' a    -- ^ query function
-           -> Renderer' a  -- ^ rendering function
+runScript' :: ([Text] -> q)
+           -> Query' q a    -- ^ query function
+           -> Renderer' q a  -- ^ rendering function
            -> IO ()
-runScript' runQuery mkItems = do
-  args <- getArgs
+runScript' inp runQuery mkItems = do
+  args <- (inp . map T.pack) <$> getArgs
   res <- runQuery args
-  printItems $ mkItems (map T.pack args) res
+  printItems $ mkItems args res
 
 
 -- | This function runs a script consisting of a query function and a
@@ -154,11 +156,7 @@ runScript' runQuery mkItems = do
 runScript :: Query a    -- ^ query function
           -> Renderer a -- ^ rendering function
           -> IO ()
-runScript runQuery mkItems = do
-  args <- getArgs
-  let arg = concat $ intersperse " " args
-  res <- runQuery arg
-  printItems $ mkItems (T.pack arg) res
+runScript = runScript' (T.concat . intersperse " ")
 
 -- | This data type represents standard search scripts used by
 -- 'searchRenderer'.
