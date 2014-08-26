@@ -1,7 +1,10 @@
 Name:                   alfred
 Version:                0.2
 Synopsis:               utility library for Alfred version 2
-Description:            A utility library for writing workflows for Alfred version 2 (<http://www.alfredapp.com>).
+Description:            
+  A utility library for writing workflows for Alfred version 2
+  (<http://www.alfredapp.com>). Examples can be found at
+  <https://github.com/pa-ba/alfred/tree/master/examples>.
 
 
 Category:               Utils
