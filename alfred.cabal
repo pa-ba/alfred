@@ -19,11 +19,20 @@ source-repository head
   type:     git
   location: https://github.com/pa-ba/alfred.git
 
+
+flag network-uri
+  description: Get Network.URI from the network-uri package
+  default: True
+
 library
   Exposed-Modules:      Alfred
                         Alfred.Query
+  if flag(network-uri)
+     build-depends: network-uri >= 2.6
+  else
+     build-depends: network < 2.6
 
-  Build-Depends:        base == 4.*, aeson >= 0.7, bytestring, text >= 1.0, xmlgen, network, HTTP,
+  Build-Depends:        base == 4.*, aeson >= 0.7, bytestring, text >= 1.0, xmlgen, HTTP,
                         hexpat >= 0.20
   hs-source-dirs:       src
   ghc-options:          -W
