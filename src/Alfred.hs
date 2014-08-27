@@ -31,7 +31,6 @@
 -- mkItems = searchRenderer Search {
 --             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
 --             notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
---             suggestError = \s -> T.concat ["Could not load suggestions! Google for ", s, "."],
 --             found = \s -> T.concat ["Search results for ", s]}
 --
 -- main = runScript (transformQuery snd runQuery) mkItems
@@ -50,7 +49,9 @@ module Alfred
     , runScript
     , runScript'
     , searchRenderer
-    , Search (..)) where
+    , searchRenderer'
+    , Search (..)
+    , Search' (..)) where
 
 import Text.XML.Generator
 import qualified Data.ByteString as B
@@ -133,7 +134,7 @@ printItems = B.putStr . renderItems
 type Renderer a = Renderer' Text a
 
 -- | This type represents rendering functions as used by 'runScript''.
-type Renderer' q a = (q -> Either String a -> Items)
+type Renderer' q a = (q -> Either Text a -> Items)
 
 -- | This function runs a script consisting of a query function and a
 -- rendering function. The query function takes string parameters and
@@ -144,9 +145,23 @@ runScript' :: ([Text] -> q)
            -> Renderer' q a  -- ^ rendering function
            -> IO ()
 runScript' inp runQuery mkItems = do
-  args <- (inp . map T.pack) <$> getArgs
+  args <- (inp . map (T.pack . umlaut)) <$> getArgs
   res <- runQuery args
   printItems $ mkItems args res
+
+
+-- | Normalise strange umlauts.
+umlaut :: String -> String
+umlaut [] = []
+umlaut ('o':'\776':r) = ('\246' : umlaut r)
+umlaut ('O':'\776':r) = ('\214' : umlaut r)
+umlaut ('u':'\776':r) = ('\252' : umlaut r)
+umlaut ('U':'\776':r) = ('\220' : umlaut r)
+umlaut ('a':'\776':r) = ('\228' : umlaut r)
+umlaut ('A':'\776':r) = ('\196' : umlaut r)
+umlaut ('a':'\778':r) = ('\229' : umlaut r)
+umlaut ('A':'\778':r) = ('\197' : umlaut r)
+umlaut (x:r) = x : umlaut r
 
 
 -- | This function runs a script consisting of a query function and a
@@ -160,7 +175,13 @@ runScript = runScript' (T.concat . intersperse " ")
 
 -- | This data type represents standard search scripts used by
 -- 'searchRenderer'.
-data Search = Search {searchURL, found, notFound, suggestError :: Text -> Text}
+data Search = Search {searchURL, found, notFound :: Text -> Text}
+
+
+-- | This data type represents advanced standard search scripts used
+-- by 'searchRenderer''.
+data Search' a = Search' {simpleSearch :: Search, 
+                          resultURL :: a -> Text, resultTitle :: a -> Text}
 
 
 -- | This function produces a rendering function for standard search
@@ -168,29 +189,55 @@ data Search = Search {searchURL, found, notFound, suggestError :: Text -> Text}
 -- as follows:
 -- 
 -- @
--- mkItems :: (Text, [Text]) -> Items
--- mkItems = mkSearchItems Search {
---             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
---             notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
---             found = \s -> T.concat ["Search results for ", s]}
+--  mkItems :: Renderer [Text]
+--  mkItems = searchRenderer Search {
+--              searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
+--              notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
+--              found = \s -> T.concat ["Search results for ", s]}
 -- @
---
+-- 
 
 searchRenderer :: Search -> Renderer [Text]
-searchRenderer Search {suggestError, searchURL} s (Left _) = 
-    [Item {uid=Nothing,arg=searchURL (escapeText s),isFile=False,
-           valid=Nothing,autocomplete=Nothing,title=s,
-           subtitle=suggestError s,icon=Just (IconFile "icon.png")}]
-searchRenderer Search {searchURL, found, notFound} s (Right suggs) = 
-    case suggs of
-      [] -> [Item {uid=Nothing,arg=searchURL2 (escapeText s),isFile=False,
+searchRenderer s = searchRenderer' Search' {simpleSearch = s, resultURL = searchURL s, resultTitle = id}
+
+
+-- | This function produces a rendering function for standard search
+-- scripts. As opposed to the simpler variant 'searchRenderer', this
+-- function works on arbitrary query result types. For example a DBLP
+-- search rendering function is defined as follows:
+-- 
+-- @
+--  mkItems :: Renderer [(Text, Text)]
+--  mkItems = searchRenderer' Search'{ 
+--              simpleSearch = Search {
+--                searchURL = \s -> T.concat ["http://dblp.uni-trier.de/search/author?author=", s],
+--                notFound = \s -> T.concat ["No suggestion. Search DBLP for ", s, "."],
+--                found = \s -> T.concat ["Open bibliography of ", s]},
+--              resultURL = \(_,r) -> T.concat ["http://dblp.uni-trier.de/pers/hd/",r,".html"],
+--              resultTitle = fst}
+-- @
+-- 
+-- In the above example the query result type is @(Text,Text)@ where
+-- the first component is the name of the result and the second
+-- component is used to construct a URL that leads directly to the
+-- search result.
+
+
+searchRenderer' :: Search' a -> Renderer [a]
+searchRenderer' Search' {simpleSearch = Search {searchURL, found, notFound}, resultURL, resultTitle} s res = 
+    case res of 
+      (Right suggs) -> case suggs of
+          [] -> [Item {uid=Nothing,arg=searchURL2 (escapeText s),isFile=False,
                        valid=Nothing,autocomplete=Nothing,title=s,
                        subtitle=notFound s,icon=Just (IconFile "icon.png")}]
-      res ->  map mkItem res
+          res ->  map mkItem res
 
-  where mkItem :: Text -> Item
-        mkItem t = Item {uid=Nothing,arg=arg,isFile=False,valid=Nothing,
-                         autocomplete=Just t, title=t,  subtitle=found t,icon=Just (IconFile "icon.png")}
-            where arg = T.concat ["\"",searchURL (escapeText t),"\" \"", searchURL (escapeText s), "\""]
+      (Left err) -> [Item {uid=Nothing,arg=searchURL2 (escapeText s),isFile=False,
+                           valid=Nothing,autocomplete=Nothing,title= s,
+                           subtitle=T.concat ["Error: ", err],icon=Just (IconFile "icon.png")}]
+  where mkItem t = Item {uid=Nothing,arg=arg,isFile=False,valid=Nothing,
+                         autocomplete=Just t', title=t',  subtitle=found t',icon=Just (IconFile "icon.png")}
+            where arg   = T.concat ["\"",resultURL t,"\" \"", searchURL (escapeText s), "\""]
+                  t' = resultTitle t
         searchURL2 s = T.concat ["\"",url,"\" \"", url, "\""]
             where url = searchURL s
