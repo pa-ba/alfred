@@ -1,7 +1,21 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
-module Alfred.Query 
+--------------------------------------------------------------------------------
+-- |
+-- Module      :  Alfred.Query
+-- Copyright   :  (c) 2014 Patrick Bahr
+-- License     :  BSD3
+-- Maintainer  :  Patrick Bahr <paba@di.ku.dk>
+-- Stability   :  experimental
+-- Portability :  non-portable (GHC Extensions)
+--
+-- This module provides utility functions to query web APIs. These
+-- queries can then be used to feed Alfred with suggestions.
+--
+--------------------------------------------------------------------------------
+
+module Alfred.Query
     ( jsonQuery
     , jsonQuery'
     , xmlQuery
@@ -13,16 +27,16 @@ module Alfred.Query
     , Query'
     ) where
 
-import Network.HTTP
-import Network.BufferType
-import Network.URI hiding (escapeString)
 import Data.Aeson
+import Network.BufferType
+import Network.HTTP
+import Network.URI hiding (escapeString)
 
 import qualified Data.Text as T
 
+import Data.ByteString
 import Data.Text (Text)
 import System.IO.Error
-import Data.ByteString
 
 import Text.XML.Expat.Tree
 
@@ -40,14 +54,14 @@ type Query' q a = q -> IO (Either Text a)
 -- as an argument and appends it to the base url to obtain the url
 -- that is used for the query. The result is then parsed as a JSON
 -- object. For example, for a Google search:
--- 
+--
 -- @
 --  runQuery :: Query (Text,[Text])
 --  runQuery = jsonQuery suggestURL
---  
+--
 --  suggestURL = "http://google.com/complete/search?client=firefox&q="
 -- @
--- 
+--
 
 jsonQuery :: FromJSON a => Text -> Query a
 jsonQuery = jsonQuery' id
@@ -58,20 +72,20 @@ jsonQuery = jsonQuery' id
 -- 'ByteString' that is returned by the query. This can be helpful if
 -- the source does not provide valid UTF-8 formatted JSON. For
 -- example, for a Google search:
--- 
+--
 -- @
 --  runQuery :: Query (Text,[Text])
 --  runQuery = jsonQuery' (encodeUtf8 . decodeLatin1) suggestURL
---  
+--
 --  suggestURL = "http://google.com/complete/search?client=firefox&q="
 -- @
--- 
+--
 
 
 jsonQuery' :: FromJSON a => (ByteString -> ByteString) -> Text -> Query a
-jsonQuery' convert = genericQuery mkJSONRequest result 
+jsonQuery' convert = genericQuery mkJSONRequest result
     where result res = case eitherDecodeStrict (convert $ rspBody res) of
-                         Left msg -> return $ Left $ T.concat 
+                         Left msg -> return $ Left $ T.concat
                                      ["JSON decoding error: ", T.pack msg, "\n", T.pack $ show $ rspBody res]
                          Right res -> return (Right res)
 
@@ -93,16 +107,16 @@ mkJSONRequest url = setHeaders (mkRequest GET url) jsonHeaders
 -- @
 -- runQuery :: Query (Node Text Text)
 -- runQuery query = xmlQuery suggestURL query
--- 
+--
 -- suggestURL = "http://dblp.uni-trier.de/search/author?xauthor="
 -- @
--- 
+--
 
 
 xmlQuery :: (GenericXMLString a, GenericXMLString b) => Text -> Query (Node a b)
 xmlQuery = genericQuery mkXMLRequest result
     where result res = case parse' defaultParseOptions (rspBody res) of
-                         Left msg -> return $ Left $ T.concat 
+                         Left msg -> return $ Left $ T.concat
                                      ["XML decoding error: ", T.pack $ show msg ,"\n", T.pack $ show (rspBody res)]
                          Right tree -> return (Right tree)
 
@@ -111,7 +125,7 @@ xmlQuery = genericQuery mkXMLRequest result
 -- used.
 xmlQueryLazy :: (GenericXMLString a, GenericXMLString b) => Text -> Query (Node a b)
 xmlQueryLazy = genericQuery mkXMLRequest result
-    where result res = let (tree, _) = parse defaultParseOptions (rspBody res) 
+    where result res = let (tree, _) = parse defaultParseOptions (rspBody res)
                        in  return (Right tree)
 
 -- | Generic function to construct queries.

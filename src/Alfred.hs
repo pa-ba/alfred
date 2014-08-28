@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings, NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 --------------------------------------------------------------------------------
 -- |
@@ -12,21 +13,22 @@
 -- This module provides utility functions to interact with Alfred
 -- version 2. It is intended to be used for writing "script filters"
 -- used in Alfred workflows.
---  
+--
 -- For example the following excerpt defines a script for Google
 -- search with auto completion:
--- 
+--
 -- @
 -- import Alfred
 -- import Alfred.Query
 -- import qualified Data.Text as T
 -- import Data.Text (Text)
--- 
--- runQuery :: String -> IO (Text,[Text])
--- runQuery query = jsonQuery suggestURL query
--- 
--- suggestURL = "http://suggestqueries.google.com/complete/search?output=toolbar&client=firefox&hl=en&q="
--- 
+-- import Data.Text.Encoding
+--
+-- runQuery :: Query (Text,[Text])
+-- runQuery = jsonQuery suggestURL
+--
+-- suggestURL = "http://google.com/complete/search?client=firefox&q="
+--
 -- mkItems :: Renderer [Text]
 -- mkItems = searchRenderer Search {
 --             searchURL = \s -> T.concat ["https://www.google.com/search?q=", s],
@@ -35,7 +37,7 @@
 --
 -- main = runScript (transformQuery snd runQuery) mkItems
 -- @
--- 
+--
 --
 --------------------------------------------------------------------------------
 
@@ -53,15 +55,15 @@ module Alfred
     , Search (..)
     , Search' (..)) where
 
-import Text.XML.Generator
+import Control.Applicative
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.List
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.ByteString (ByteString)
-import Data.Monoid
 import System.Environment
-import Data.List
-import Control.Applicative
+import Text.XML.Generator
 
 import Alfred.Query
 
@@ -69,14 +71,14 @@ import Alfred.Query
 -- the result of a script filter.
 
 data Item = Item {
-      uid :: Maybe Text
-    , arg :: Text
-    , isFile :: Bool
-    , valid :: Maybe Bool
+      uid          :: Maybe Text
+    , arg          :: Text
+    , isFile       :: Bool
+    , valid        :: Maybe Bool
     , autocomplete :: Maybe Text
-    , title :: Text
-    , subtitle :: Text
-    , icon :: Maybe Icon
+    , title        :: Text
+    , subtitle     :: Text
+    , icon         :: Maybe Icon
 }
 
 -- | Default item.
@@ -104,13 +106,13 @@ xmlIcon icon = case icon of
 
 -- | Render an item as XML element.
 xmlItem :: Item -> Xml Elem
-xmlItem (Item  uid arg file val auto title sub icon) = 
+xmlItem (Item  uid arg file val auto title sub icon) =
     xelem "item" $
           (uid' <> xattr "arg" arg <> val' <> auto' <> file') <#>
           (xelemWithText "title" title <> xelemWithText "subtitle" sub <> icon')
-          
+
         where uid' = case uid of Nothing -> mempty; Just uid -> xattr "uid" uid
-              val' = case val of 
+              val' = case val of
                        Nothing -> mempty
                        Just val -> xattr "valid" (if val then "yes" else "no")
               file' = if file then xattr "type" "file" else mempty
@@ -119,7 +121,7 @@ xmlItem (Item  uid arg file val auto title sub icon) =
 
 -- | Render items as an XML element.
 xmlItems :: Items -> Xml Elem
-xmlItems = xelem "items" . mconcat . map xmlItem 
+xmlItems = xelem "items" . mconcat . map xmlItem
 
 
 -- | Render items as an XML 'ByteString'.
@@ -180,14 +182,14 @@ data Search = Search {searchURL, found, notFound :: Text -> Text}
 
 -- | This data type represents advanced standard search scripts used
 -- by 'searchRenderer''.
-data Search' a = Search' {simpleSearch :: Search, 
+data Search' a = Search' {simpleSearch :: Search,
                           resultURL :: a -> Text, resultTitle :: a -> Text}
 
 
 -- | This function produces a rendering function for standard search
 -- scripts. For example a Google search rendering function is defined
 -- as follows:
--- 
+--
 -- @
 --  mkItems :: Renderer [Text]
 --  mkItems = searchRenderer Search {
@@ -195,7 +197,7 @@ data Search' a = Search' {simpleSearch :: Search,
 --              notFound = \s -> T.concat ["No suggestion. Google for ", s, "."],
 --              found = \s -> T.concat ["Search results for ", s]}
 -- @
--- 
+--
 
 searchRenderer :: Search -> Renderer [Text]
 searchRenderer s = searchRenderer' Search' { simpleSearch = s, resultURL = searchURL s . escapeText
@@ -206,10 +208,10 @@ searchRenderer s = searchRenderer' Search' { simpleSearch = s, resultURL = searc
 -- scripts. As opposed to the simpler variant 'searchRenderer', this
 -- function works on arbitrary query result types. For example a DBLP
 -- search rendering function is defined as follows:
--- 
+--
 -- @
 --  mkItems :: Renderer [(Text, Text)]
---  mkItems = searchRenderer' Search'{ 
+--  mkItems = searchRenderer' Search'{
 --              simpleSearch = Search {
 --                searchURL = \s -> T.concat ["http://dblp.uni-trier.de/search/author?author=", s],
 --                notFound = \s -> T.concat ["No suggestion. Search DBLP for ", s, "."],
@@ -217,7 +219,7 @@ searchRenderer s = searchRenderer' Search' { simpleSearch = s, resultURL = searc
 --              resultURL = \(_,r) -> T.concat ["http://dblp.uni-trier.de/pers/hd/",r,".html"],
 --              resultTitle = fst}
 -- @
--- 
+--
 -- In the above example the query result type is @(Text,Text)@ where
 -- the first component is the name of the result and the second
 -- component is used to construct a URL that leads directly to the
@@ -225,8 +227,8 @@ searchRenderer s = searchRenderer' Search' { simpleSearch = s, resultURL = searc
 
 
 searchRenderer' :: Search' a -> Renderer [a]
-searchRenderer' Search' {simpleSearch = Search {searchURL, found, notFound}, resultURL, resultTitle} s res = 
-    case res of 
+searchRenderer' Search' {simpleSearch = Search {searchURL, found, notFound}, resultURL, resultTitle} s res =
+    case res of
       (Right suggs) -> case suggs of
           [] -> [Item {uid=Nothing,arg=searchURL2 (escapeText s),isFile=False,
                        valid=Nothing,autocomplete=Nothing,title=s,
