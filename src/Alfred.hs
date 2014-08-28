@@ -198,7 +198,8 @@ data Search' a = Search' {simpleSearch :: Search,
 -- 
 
 searchRenderer :: Search -> Renderer [Text]
-searchRenderer s = searchRenderer' Search' {simpleSearch = s, resultURL = searchURL s, resultTitle = id}
+searchRenderer s = searchRenderer' Search' { simpleSearch = s, resultURL = searchURL s . escapeText
+                                           , resultTitle = id}
 
 
 -- | This function produces a rendering function for standard search
