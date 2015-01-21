@@ -177,12 +177,12 @@ runScript = runScript' (T.concat . intersperse " ")
 
 -- | This data type represents standard search scripts used by
 -- 'searchRenderer'.
-data Search = Search {searchURL, found, notFound :: Text -> Text}
+data Search a = Search {searchURL, notFound :: Text -> Text, found :: a -> Text}
 
 
 -- | This data type represents advanced standard search scripts used
 -- by 'searchRenderer''.
-data Search' a = Search' {simpleSearch :: Search,
+data Search' a = Search' {simpleSearch :: Search a,
                           resultURL :: a -> Text, resultTitle :: a -> Text}
 
 
@@ -199,7 +199,7 @@ data Search' a = Search' {simpleSearch :: Search,
 -- @
 --
 
-searchRenderer :: Search -> Renderer [Text]
+searchRenderer :: Search Text -> Renderer [Text]
 searchRenderer s = searchRenderer' Search' { simpleSearch = s, resultURL = searchURL s . escapeText
                                            , resultTitle = id}
 
@@ -239,7 +239,7 @@ searchRenderer' Search' {simpleSearch = Search {searchURL, found, notFound}, res
                            valid=Nothing,autocomplete=Nothing,title= s,
                            subtitle=T.concat ["Error: ", err],icon=Just (IconFile "icon.png")}]
   where mkItem t = Item {uid=Nothing,arg=arg,isFile=False,valid=Nothing,
-                         autocomplete=Just t', title=t',  subtitle=found t',icon=Just (IconFile "icon.png")}
+                         autocomplete=Just t', title=t',  subtitle=found t,icon=Just (IconFile "icon.png")}
             where arg   = T.concat ["\"",resultURL t,"\" \"", searchURL (escapeText s), "\""]
                   t' = resultTitle t
         searchURL2 s = T.concat ["\"",url,"\" \"", url, "\""]
