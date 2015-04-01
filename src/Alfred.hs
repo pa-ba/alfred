@@ -1,6 +1,6 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE CPP               #-}
 --------------------------------------------------------------------------------
 -- |
 -- Module      :  Alfred
@@ -55,7 +55,10 @@ module Alfred
     , Search (..)
     , Search' (..)) where
 
+#if __GLASGOW_HASKELL__ < 710
 import Control.Applicative
+#endif
+
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.List
