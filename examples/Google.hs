@@ -6,10 +6,10 @@ import Alfred
 import Alfred.Query
 import qualified Data.Text as T
 import Data.Text (Text)
-import Data.Text.Encoding
+import Data.Text.Lazy.Encoding as L
 
 runQuery :: Query (Text,[Text])
-runQuery = jsonQuery' (encodeUtf8 . decodeLatin1) suggestURL
+runQuery = jsonQuery' (L.encodeUtf8 . L.decodeLatin1) suggestURL
 
 suggestURL = "http://google.com/complete/search?client=firefox&q="
 

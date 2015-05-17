@@ -9,7 +9,6 @@ import Data.Text (Text)
 import Text.XML.Expat.Tree
 import Data.Maybe
 
-import System.Environment
 runQuery :: Query (Node Text Text)
 -- Use the lazy variant since DBLP returns a vast XML document
 -- containing all possible matches. 
@@ -23,7 +22,7 @@ mkItems = searchRenderer' Search'{
             simpleSearch = Search {
               searchURL = \s -> T.concat ["http://dblp.uni-trier.de/search/author?author=", s],
               notFound = \s -> T.concat ["No suggestion. Search DBLP for ", s, "."],
-              found = \s -> T.concat ["Open bibliography of ", s]},
+              found = \(s,_) -> T.concat ["Open bibliography of ", s]},
             resultURL = \(_,r) -> T.concat ["http://dblp.uni-trier.de/pers/hd/",r,".html"],
             resultTitle = fst}
                                    
