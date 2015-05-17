@@ -1,0 +1,4 @@
+0.5
+-----
+* use http-conduit instead of HTTP package
+* add support for queries via HTTPS (thanks to http-conduit)
