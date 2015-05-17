@@ -1,5 +1,5 @@
 Name:                   alfred
-Version:                0.4
+Version:                0.5
 Synopsis:               utility library for Alfred version 2
 Description:            
   A utility library for writing workflows for Alfred version 2
@@ -32,7 +32,7 @@ library
   else
      build-depends: network < 2.6
 
-  Build-Depends:        base == 4.*, aeson >= 0.7, bytestring, text >= 1.0, xmlgen, HTTP,
-                        hexpat >= 0.20
+  Build-Depends:        base == 4.*, aeson >= 0.7, bytestring, text >= 1.0, xmlgen,
+                        hexpat >= 0.20, http-conduit >= 2.0, http-types
   hs-source-dirs:       src
   ghc-options:          -W

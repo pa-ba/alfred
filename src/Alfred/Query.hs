@@ -28,13 +28,14 @@ module Alfred.Query
     ) where
 
 import Data.Aeson
-import Network.BufferType
-import Network.HTTP
+import Network.HTTP.Conduit
+import Network.HTTP.Types hiding (Query)
+
 import Network.URI hiding (escapeString)
 
 import qualified Data.Text as T
 
-import Data.ByteString
+import Data.ByteString.Lazy
 import Data.Text (Text)
 import System.IO.Error
 
@@ -84,18 +85,18 @@ jsonQuery = jsonQuery' id
 
 jsonQuery' :: FromJSON a => (ByteString -> ByteString) -> Text -> Query a
 jsonQuery' convert = genericQuery mkJSONRequest result
-    where result res = case eitherDecodeStrict (convert $ rspBody res) of
+    where result res = case eitherDecode (convert $ responseBody res) of
                          Left msg -> return $ Left $ T.concat
-                                     ["JSON decoding error: ", T.pack msg, "\n", T.pack $ show $ rspBody res]
+                                     ["JSON decoding error: ", T.pack msg, "\n", T.pack $ show $ responseBody res]
                          Right res -> return (Right res)
 
 
 -- | Constructions a request for doing an XML query.
 
-mkJSONRequest :: BufferType ty => URI -> Request ty
-mkJSONRequest url = setHeaders (mkRequest GET url) jsonHeaders
+mkJSONRequest :: Request -> Request
+mkJSONRequest req = req {requestHeaders=jsonHeaders}
     where jsonHeaders :: [Header]
-          jsonHeaders = [mkHeader HdrContentType "application/json; charset=utf-8"]
+          jsonHeaders = (hContentType, "application/json; charset=utf-8")  : requestHeaders req
 
 -- | This function performs a query by performing an HTTP GET request
 -- at the url obtained by concatenating the first argument with the
@@ -115,41 +116,37 @@ mkJSONRequest url = setHeaders (mkRequest GET url) jsonHeaders
 
 xmlQuery :: (GenericXMLString a, GenericXMLString b) => Text -> Query (Node a b)
 xmlQuery = genericQuery mkXMLRequest result
-    where result res = case parse' defaultParseOptions (rspBody res) of
-                         Left msg -> return $ Left $ T.concat
-                                     ["XML decoding error: ", T.pack $ show msg ,"\n", T.pack $ show (rspBody res)]
-                         Right tree -> return (Right tree)
+    where result res = let (tree, err) = parse defaultParseOptions (responseBody res) in
+                        case err of
+                         Just msg -> return $ Left $ T.concat
+                                     ["XML decoding error: ", T.pack $ show msg ,"\n", T.pack $ show (responseBody res)]
+                         Nothing -> return (Right tree)
 
 -- | Lazy variant of 'xmlQueryLazy'. This function may be useful if
 -- results tend to be lengthy and only a small prefix of the result is
 -- used.
 xmlQueryLazy :: (GenericXMLString a, GenericXMLString b) => Text -> Query (Node a b)
 xmlQueryLazy = genericQuery mkXMLRequest result
-    where result res = let (tree, _) = parse defaultParseOptions (rspBody res)
+    where result res = let (tree, _) = parse defaultParseOptions (responseBody res)
                        in  return (Right tree)
 
 -- | Generic function to construct queries.
-genericQuery :: HStream ty => (URI -> Request ty)
-             -> (Response ty -> IO (Either Text b))
+genericQuery :: (Request -> Request)
+             -> (Response ByteString -> IO (Either Text b))
              -> Text -> Query b
-genericQuery mkRequest result base query = let urlText = T.concat [base,  escapeText query] in
-   case (parseURI $ T.unpack urlText) of
+genericQuery modRequest result base query = let urlText = T.concat [base,  escapeText query] in
+   case (parseUrl $ T.unpack urlText) of
      Nothing -> return $ Left $ T.concat ["illformed url: ", urlText]
-     Just url -> catchIOError execute (return . Left . T.pack . show)
-         where execute = do
-                 res <- simpleHTTP (mkRequest url)
-                 case res of
-                      Left err -> return $ Left $ T.pack (show err)
-                      Right res -> result res
-
+     Just req -> catchIOError execute (return . Left . T.pack . show)
+         where execute = withManager (\man -> (httpLbs (modRequest req) man)) >>= result
 
 
 -- | Constructions a request for doing a JSON query.
 
-mkXMLRequest :: BufferType ty => URI -> Request ty
-mkXMLRequest url = setHeaders (mkRequest GET url) xmlHeaders
+mkXMLRequest :: Request -> Request
+mkXMLRequest req = req {requestHeaders=xmlHeaders}
     where xmlHeaders :: [Header]
-          xmlHeaders = [mkHeader HdrContentType "application/xml"]
+          xmlHeaders = (hContentType, "application/xml") : requestHeaders req
 
 
 -- | Functorial map for 'Query''.
