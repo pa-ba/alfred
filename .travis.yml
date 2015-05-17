@@ -25,6 +25,8 @@ script:
  - cabal test
  - cabal check
  - cabal sdist   # tests that a source-distribution can be generated
+# check that the examples compile
+ - for file in *.hs; do ghc -i../src -fno-code ${file}; done
 
 # check that the generated source-distribution can be built & installed
  - SRC_TGZ=$(cabal info . | awk '{print $2;exit}').tar.gz &&
