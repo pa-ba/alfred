@@ -22,7 +22,6 @@
 -- import Alfred.Query
 -- import qualified Data.Text as T
 -- import Data.Text (Text)
--- import Data.Text.Encoding
 --
 -- runQuery :: Query (Text,[Text])
 -- runQuery = jsonQuery suggestURL
@@ -218,7 +217,7 @@ searchRenderer s = searchRenderer' Search' { simpleSearch = s, resultURL = searc
 --              simpleSearch = Search {
 --                searchURL = \s -> T.concat ["http://dblp.uni-trier.de/search/author?author=", s],
 --                notFound = \s -> T.concat ["No suggestion. Search DBLP for ", s, "."],
---                found = \s -> T.concat ["Open bibliography of ", s]},
+--                found = \(s,_) -> T.concat ["Open bibliography of ", s]},
 --              resultURL = \(_,r) -> T.concat ["http://dblp.uni-trier.de/pers/hd/",r,".html"],
 --              resultTitle = fst}
 -- @
