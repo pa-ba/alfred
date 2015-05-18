@@ -4,8 +4,9 @@ Synopsis:               utility library for Alfred version 2
 Description:            
   A utility library for writing workflows for Alfred version 2
   (<http://www.alfredapp.com>). Examples can be found at
-  <https://github.com/pa-ba/alfred/tree/master/examples>.
-
+  <https://github.com/pa-ba/alfred/tree/master/examples>. Alfred 2
+  workflows that use these examples can be found at
+  <https://github.com/pa-ba/alfred/tree/master/workflows>.
 
 Category:               Utils
 License:                BSD3
