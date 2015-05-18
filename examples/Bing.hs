@@ -11,7 +11,7 @@ import Data.Text (Text)
 runQuery :: Query (Text,[Text])
 runQuery query = jsonQuery suggestURL query
 
-suggestURL = "http://api.bing.com/osjson.aspx?query="
+suggestURL = "http://api.bing.com/osjson.aspx?language=en&query="
 
 mkItems :: Renderer [Text]
 mkItems = searchRenderer Search {
